@@ -66,6 +66,7 @@ int main() {
 
     ///////////////////////////////////// 3번 로그인 /////////////////////////////////////////////
     FILE *file = fopen(USER_FILE, "r");
+    Packet login_packet;
     char buffer[BUFFER_SIZE];
     if (file) { // user.txt 파일이 이미 있으면 저장된 유저 정보 사용
         fgets(username, sizeof(username), file);
@@ -79,10 +80,19 @@ int main() {
             username[strcspn(username, "\n")] = '\0';
 
             // 서버에 이름 전송
-            send(client_socket, username, strlen(username), 0);
+            login_packet.flag = 0; // 로그인 플래그
+            strncpy(login_packet.username, username, sizeof(login_packet.username));
+            if (send(client_socket, &login_packet, sizeof(Packet), 0) < 0) {
+                perror("Failed to send username");
+                continue;
+            }
 
             // 서버 응답 대기
-            bytes_received = recv(client_socket, buffer, sizeof(BUFFER_SIZE), 0);
+            bytes_received = recv(client_socket, buffer, sizeof(buffer), 0);
+            if (bytes_received < 0) {
+                perror("Failed to receive data");
+                exit(EXIT_FAILURE);
+            }
             buffer[bytes_received] = '\0';
 
             if (strcmp(buffer, "REGISTERED") == 0) { // 등록 성공 응답 수신
@@ -103,29 +113,35 @@ int main() {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////////// 4번 채팅내역 & 공유파일 불러오기 ///////////////////////////////
-    Packet chatLog_and_sharedFile[2];
+    Packet received_packet;
+    Packet chatLog_packet; // 불러온 채팅로그 저장할 패킷
+    Packet sharedFile_packet; // 불러온 공유파일 저장할 패킷
     // 채팅 내역 수신
-    bytes_received = recv(client_socket, &chatLog_and_sharedFile[0], sizeof(Packet), 0);
+    bytes_received = recv(client_socket, &received_packet, sizeof(Packet), 0);
     if (bytes_received <= 0) {
         perror("Failed to receive chat history");
         exit(EXIT_FAILURE);
     }
-    if (chatLog_and_sharedFile[0].flag != 1) { // 채팅 메시지
+    if (received_packet.flag == 1) { // 채팅 메시지
+        chatLog_packet = received_packet;
+    }
+    else {
         printf("Unexpected packet type for chat history\n");
     }
 
     // 공유 파일 수신
-    bytes_received = recv(client_socket, &chatLog_and_sharedFile[1], sizeof(Packet), 0);
+    bytes_received = recv(client_socket, &received_packet, sizeof(Packet), 0);
     if (bytes_received <= 0) {
         perror("Failed to receive shared file");
         exit(EXIT_FAILURE);
     }
-    if (chatLog_and_sharedFile[1].flag == 2) { // 파일 데이터
-        printf("[File Update] Received file data:\n%s\n", packet.file_data);
+    if (received_packet.flag == 2) { // 파일 데이터
+        sharedFile_packet = received_packet;
+        printf("[File Update] Received file data\n");
         // 공유 파일에 파일 데이터를 저장
         FILE *shared_file = fopen(SHARED_FILE, "w");
         if (shared_file) {
-            fwrite(packet.file_data, sizeof(char), strlen(packet.file_data), shared_file);
+            fwrite(sharedFile_packet.file_data, sizeof(char), strlen(sharedFile_packet.file_data), shared_file);
             fclose(shared_file);
         } else {
             perror("Failed to open shared file");

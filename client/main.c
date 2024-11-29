@@ -11,7 +11,28 @@ int main() {
     char buffer[BUFFER_SIZE];
     char username[50];
 
-    // user.txt 확인
+    // 1번
+    // 소캣연결
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT);
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Connection failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // 2번
+    // thread [서버 패킷 수신] 생성
+    
+    // 3번
+    // 로그인
     FILE *file = fopen(USER_FILE, "r");
     if (file) { // user.txt 파일이 이미 있으면 저장된 유저 정보 사용
         fgets(username, sizeof(username), file);
@@ -45,22 +66,6 @@ int main() {
                 printf("Error communicating with server.\n");
             }
         }
-    }
-
-    // 서버 연결
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Connection failed");
-        exit(EXIT_FAILURE);
     }
 
     send(sockfd, username, strlen(username), 0);

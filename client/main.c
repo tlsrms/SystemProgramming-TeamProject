@@ -81,7 +81,7 @@ int main() {
 
             // 서버에 이름 전송
             login_packet.flag = 0; // 로그인 플래그
-            strncpy(login_packet.username, username, sizeof(login_packet.username));
+            strncpy(login_packet.username, username, sizeof(username));
             if (send(client_socket, &login_packet, sizeof(Packet), 0) < 0) {
                 perror("Failed to send username");
                 continue;

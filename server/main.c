@@ -131,13 +131,13 @@ void* receive_packet(void *arg) {
 			return NULL;
 		}
 		//
-		temp_client.sockfd = client_count; //클라이언트 socketfd main으로 넘기기
+		temp_client.sockfd = client_sock; //클라이언트 socketfd main으로 넘기기
 		strcncpy(temp_client.username, packet.username, sizeof(packet.username)); // 유저 이름 main으로 넘기기
 
 		// !!! queue 처리 시간대랑 temp_client 설정 시간대가 안 맞으면 로그인 처리가 이상해짐(수정 필요)
 
 		// 수신된 패킷을 작업 큐에 추가
-		enqueue_packet(packet);
+		enqueue(packet);
 		printf("[Server] Enqueued packet from client");
 	}
 

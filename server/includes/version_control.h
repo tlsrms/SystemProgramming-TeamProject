@@ -1,34 +1,26 @@
 #ifndef VERSION_CONTROL_H
 #define VERSION_CONTROL_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <pthread.h>
-#include <time.h>
 
-#define VERSION_DIR "version_logs/"  // Directory to store versioned files
-#define SHARED_FILE "shared_file.txt" // Current shared file
-#define MAX_VERSION_LENGTH 10
-
-// Packet structure for version control commands
+// 데이터 패킷 구조체
 typedef struct {
-    int flag;                   // Data type flag (for version control)
-    char username[50];          // Username of the client
-    char message[256];          // Version control message (e.g., commit, rebase)
-    char file_data[1024];       // File data (for commit or rebase operations)
-    int version;                // Version number (for rebase or commit)
+    int flag;                  // 데이터 유형 플래그
+    char username[50];         // 사용자 이름
+    char message[BUFFER_SIZE]; // 메시지 또는 파일 이름
+    char file_data[BUFFER_SIZE]; // 파일 데이터
 } Packet;
 
-// Function prototypes for version control
-void commit_version(int version);
-void rebase_version(int version);
-void list_versions(void);
-void save_version(const char *filename, const char *data, int version);
-void restore_version(int version);
+// 클라이언트 구조체
+typedef struct {
+    int sockfd;
+    char username[50];
+    pthread_t thread;
+} Client;
 
-// Utility function to generate a version file name based on the version number
-char *generate_version_filename(int version);
+void initialize_version_directory();
+void commit_version();
+void log_versions();
+void rebase_version(int version_number);
 
 #endif // VERSION_CONTROL_H

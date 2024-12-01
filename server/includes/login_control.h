@@ -1,5 +1,5 @@
-#ifndef CLIENT_HANDLER.H
-#define CLIENT_HANDLER.H
+#ifndef LOGIN_CONTROL.H
+#define LOGIN_CONTROL.H
 
 #include "common.h"
 

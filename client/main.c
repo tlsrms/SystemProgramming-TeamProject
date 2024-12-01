@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 
 #define PORT 12345
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 void receive_log(int sock);
 

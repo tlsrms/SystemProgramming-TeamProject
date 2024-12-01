@@ -1,8 +1,7 @@
 #include <pthread.h>
 #include "includes/common.h"
 
-extern pthread_mutex_t clients_mutex;
-
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
  * @brief 모든 클라이언트에게 패킷을 브로드캐스트하는 함수.

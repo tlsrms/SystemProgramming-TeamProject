@@ -4,8 +4,7 @@
 #include "includes/chat_handler.h"
 #include "includes/broadcast.h"
 
-extern pthread_mutex_t file_mutex;
-
+extern pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
  * @brief 클라이언트로부터 받은 채팅 메시지를 처리하는 함수.

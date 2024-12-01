@@ -24,12 +24,6 @@ typedef struct {
     pthread_t thread;
 } Client;
 
-// 전역 변수 선언
-extern Client clients[MAX_CLIENTS];       // 클라이언트 정보 배열
-extern int client_count;                  // 연결된 클라이언트 수
-extern pthread_mutex_t clients_mutex;     // 클라이언트 배열 보호 뮤텍스
-extern pthread_mutex_t file_mutex;        // 파일 작업 보호 뮤텍스
-
 #endif
 
 

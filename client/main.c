@@ -3,44 +3,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include "includes/common.h"
+#include "includes/common.h"	
 
-int client_socket;
-char username[50];
-
-// 작업 큐 정의
-#define QUEUE_SIZE 100
-pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-Packet packet_queue[QUEUE_SIZE];
-int front = 0;
-int rear = 0;
-
-void enqueue(Packet packet) {
-    pthread_mutex_lock(&queue_mutex);
-    if ((rear + 1) % QUEUE_SIZE == front) {
-        printf("Queue is full\n");
-    } else {
-        packet_queue[rear] = packet;
-        rear = (rear + 1) % QUEUE_SIZE;
-    }
-    pthread_mutex_unlock(&queue_mutex);
-}
-
-int dequeue(Packet *packet) {
-    pthread_mutex_lock(&queue_mutex);
-    if (front == rear) {
-        pthread_mutex_unlock(&queue_mutex);
-        return 0;
-    }
-    *packet = packet_queue[front];
-    front = (front + 1) % QUEUE_SIZE;
-    pthread_mutex_unlock(&queue_mutex);
-    return 1;
-}
+void enqueue(Packet packet);
+int dequeue(Packet *packet);
 
 int main() {
-	struct sockaddr_in server_addr;			// 서버 주소 저장
-    int bytes_received;                     // 데이터 수신 크기
+    int bytes_received;                
 
     ////////////////////////////////// 1번 소켓 연결 //////////////////////////////////////////
     client_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -81,7 +50,7 @@ int main() {
 
             // 서버에 이름 전송
             login_packet.flag = 0; // 로그인 플래그
-            strncpy(login_packet.username, username, sizeof(username));
+            strncpy(login_packet.username, username, sizeof(login_packet.username));
             if (send(client_socket, &login_packet, sizeof(Packet), 0) < 0) {
                 perror("Failed to send username");
                 continue;
@@ -195,4 +164,27 @@ int main() {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     return 0;
+}
+
+void enqueue(Packet packet) {
+    pthread_mutex_lock(&queue_mutex);
+    if ((rear + 1) % QUEUE_SIZE == front) {
+        printf("Queue is full\n");
+    } else {
+        packet_queue[rear] = packet;
+        rear = (rear + 1) % QUEUE_SIZE;
+    }
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+int dequeue(Packet *packet) {
+    pthread_mutex_lock(&queue_mutex);
+    if (front == rear) {
+        pthread_mutex_unlock(&queue_mutex);
+        return 0;
+    }
+    *packet = packet_queue[front];
+    front = (front + 1) % QUEUE_SIZE;
+    pthread_mutex_unlock(&queue_mutex);
+    return 1;
 }

@@ -1,3 +1,4 @@
+#include <pthread.h>
 #ifndef COMMON_H
 #define COMMON_H
 
@@ -14,5 +15,16 @@ typedef struct
 	char file_data[BUFFER_SIZE]; // 파일 데이터
 } Packet;
 
+// 작업 큐 정의
+#define QUEUE_SIZE 100
+pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+Packet packet_queue[QUEUE_SIZE];
+int front = 0;
+int rear = 0;
+
+// 전역 변수 선언
+extern int client_socket;
+extern struct sockaddr_in server_addr;	
+extern char username[50];
 
 #endif

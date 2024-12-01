@@ -2,7 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 void receive_log(int sock) {
     char buffer[BUFFER_SIZE];

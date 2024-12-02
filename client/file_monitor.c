@@ -88,7 +88,7 @@ int init_inotify() {
 int send_file_to_server(const char* file_path, int socket_fd, char *uname) {
     size_t bytes_read;
 	Packet new_packet = {0};
-	new_packet.flag = 1;
+	new_packet.flag = 2;
 	snprintf(new_packet.username, sizeof(new_packet.username), "%s", uname);
 
     pthread_mutex_lock(&file_mutex);

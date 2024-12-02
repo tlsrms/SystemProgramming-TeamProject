@@ -169,19 +169,9 @@ void* receive_packet(void *arg) {
                 }
             } else {
                 // 로그인 없이 접속한 경우 (user.txt에 이름이 이미 있음)
-                // 클라이언트 배열에 해당 사용자명으로 등록되어 있는지 확인
                 pthread_mutex_lock(&clients_mutex);
-                int found = 0;
-                for (int i = 0; i < client_count; i++) {
-                    if (strcmp(clients[i].username, temp_client.username) == 0) {
-                        found = 1;
-                        break;
-                    }
-                }
-                if (!found) {
-                    // 클라이언트 배열에 추가
-                    clients[client_count++] = temp_client;
-                }
+                // 클라이언트 배열에 추가
+                clients[client_count++] = temp_client;
                 pthread_mutex_unlock(&clients_mutex);
                 is_logged_in = 1;
 

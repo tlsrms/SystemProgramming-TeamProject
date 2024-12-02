@@ -7,11 +7,12 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include <string.h>
+#include "../includes/common.h"
 
 #define PORT 8080
-#define BUFFER_SIZE 1024
-#define TARGET_DIRECTORY "/home/sunflow-er/sharing/"
-#define MONITORED_FILE "client_file.txt"
+#define BUFFER_SIZE 4096
+#define WATCH_DIRECTORY "./watch/"
+#define SHARED_FILE "shared_file.txt"
 
 // 패킷 구조체
 typedef struct
@@ -28,9 +29,9 @@ void *receive_server_packet(void *arg);
 // 터미널 입력을 받고 이를 서버로 보내는 스레드 함수
 void *send_terminal_packet(void *arg);
 
-void create_and_send_file();
-void load_and_send_file(const char *input);
-void disconnect_from_server();
+void command_new();
+void command_load(const char *input);
+void command_quit();
 void send_chat_message(const char *input);
 
 int client_socket; // 클라이언트 소켓, 추후 스레드에서 접근
@@ -86,7 +87,8 @@ void *receive_server_packet(void *arg)
 			exit(EXIT_FAILURE);
 		}
 
-		// TODO 패킷 정보를 메인스레드의 작업큐로 보내는 코드
+		// 패킷 정보를 메인스레드의 작업큐로 보내는 코드
+		enqueue(packet);
 	}
 
 	return NULL;
@@ -104,15 +106,15 @@ void *send_terminal_packet(void *arg)
 		// 입력 내용에 따라 분기
 		if (strcmp(input, "/new") == 0)
 		{
-			create_and_send_file(); // 새로운 파일 생성 및 전송
+			command_new(); //shared_file.txt 초기화
 		}
 		else if (strstr(input, "/load") != NULL)
 		{
-			load_and_send_file(input); // 파일 로드 및 전송
+			command_load(input); // 파일 내용 복사 및 shared_file.txt에 붙여넣기
 		}
 		else if (strcmp(input, "/quit") == 0)
 		{
-			disconnect_from_server(); // 서버와의 연결 종료
+			command_quit(); // 서버와의 연결 종료
 			break;
 		}
 		else
@@ -120,113 +122,67 @@ void *send_terminal_packet(void *arg)
 			send_chat_message(input); // 채팅 메시지 전송
 		}
 	}
+
+	return NULL;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////// 터미널 입력에 따른 분기별 함수 /////////////////////////////////////////////////////////////////////
-void create_and_send_file()
+void command_new()
 {
-	Packet packet;
+	// 파일을 쓰기 모드로 열기
+    FILE *file = fopen(SHARED_FILE, "w"); // 쓰기 모드는 자동으로 파일 내용을 삭제
+    if (file == NULL) {
+        perror("[Error] Failed to open file");
+        return;
+    }
 
-	// 새로운 파일 이름 입력
-	printf("Enter the file name to create: ");
-	char filename[BUFFER_SIZE];
-	fgets(filename, sizeof(filename), stdin);
-	filename[strcspn(filename, "\n")] = '\0'; // 개행 문자 제거
-
-	// 파일 생성
-	FILE *file = fopen(filename, "w");
-	if (file == NULL)
-	{
-		perror("[Client] Failed to create file");
-		return;
-	}
-
-	// 새로운 파일 내용 초기화
-	printf("Enter content for the new file (end with an empty line):\n");
-	char line[BUFFER_SIZE];
-	while (1)
-	{
-		fgets(line, sizeof(line), stdin);
-		if (strcmp(line, "\n") == 0)
-			break; // 빈 줄로 종료
-		fputs(line, file);
-	}
-	fclose(file);
-
-	// 파일 읽기
-	file = fopen(filename, "r");
-	if (file == NULL)
-	{
-		perror("[Client] Failed to open file for reading");
-		return;
-	}
-
-	memset(&packet, 0, sizeof(Packet)); // 패킷 초기화
-	packet.flag = 2;					// 플래그 설정 (파일 전송)
-	strncpy(packet.username, username, sizeof(packet.username));
-	fread(packet.file_data, 1, sizeof(packet.file_data) - 1, file);
-	fclose(file);
-
-	// 파일 전송
-	if (send(client_socket, &packet, sizeof(Packet), 0) < 0)
-	{
-		perror("[Client] Failed to send file");
-	}
-	else
-	{
-		printf("[Client] File '%s' created and sent to server successfully.\n", filename);
-	}
+    fclose(file);
+	printf("[Client] File '%s' newly created successfully.\n", SHARED_FILE);
 }
 
-void load_and_send_file(const char *input)
+void command_load(const char *input)
 {
-	Packet packet;
+	// 입력에서 파일 경로 추출
+    char filepath[BUFFER_SIZE];
+    sscanf(input + 6, "%s", filepath); // "/load " 이후 파일 이름 읽기
 
-	// 입력에서 파일 이름 추출
-	char filename[BUFFER_SIZE];
-	sscanf(input + 6, "%s", filename); // "/load " 이후 파일 이름 읽기
+    printf("[Client] Loading file from path: %s\n", filepath);
 
-	// 디폴트 디렉토리 경로와 파일 이름 결합
-	char filepath[BUFFER_SIZE];
-	snprintf(filepath, sizeof(filepath), "%s%s", TARGET_DIRECTORY, filename);
+    // loaded_file.txt 열기 (읽기 모드)
+    FILE *loaded_file = fopen(filepath, "r");
+    if (loaded_file == NULL)
+    {
+        perror("[Client] Failed to open file");
+        return;
+    }
 
-	printf("[Client] Loading file from path: %s\n", filepath);
+    // shared_file.txt 열기 (쓰기 모드)
+    FILE *shared_file = fopen(SHARED_FILE, "w");
+    if (shared_file == NULL)
+    {
+        perror("[Client] Failed to open shared_file.txt");
+        fclose(loaded_file);
+        return;
+    }
 
-	// 파일 열기
-	FILE *file = fopen(filepath, "r");
-	if (file == NULL)
-	{
-		perror("[Client] Failed to open file");
-		return;
-	}
+    // 파일 내용 복사
+    char buffer[BUFFER_SIZE];
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), loaded_file)) > 0)
+    {
+        fwrite(buffer, 1, bytes_read, shared_file);
+    }
 
-	// 패킷 초기화
-	memset(&packet, 0, sizeof(Packet));
-	packet.flag = 3; // 플래그 설정 (기존 파일 업로드)
-	strncpy(packet.username, username, sizeof(packet.username));
+    // 파일 스트림 닫기
+    fclose(loaded_file);
+    fclose(shared_file);
 
-	// 파일 읽기
-	size_t bytes_read = fread(packet.file_data, 1, sizeof(packet.file_data) - 1, file);
-	fclose(file);
+    printf("[Client] File '%s' loaded to 'shared_file.txt' successfully.\n", filepath);
 
-	if (bytes_read == 0)
-	{
-		printf("[Client] File '%s' is empty.\n", filename);
-	}
-
-	// 서버로 패킷 전송
-	if (send(client_socket, &packet, sizeof(Packet), 0) < 0)
-	{
-		perror("[Client] Failed to send file");
-	}
-	else
-	{
-		printf("[Client] File '%s' sent to server successfully.\n", filename);
-	}
 }
 
-void disconnect_from_server()
+void command_quit()
 {
 	printf("[Client] Exiting...\n");
 	close(client_socket);
@@ -241,9 +197,11 @@ void send_chat_message(const char *input)
 	strncpy(packet.username, username, sizeof(packet.username));
 	strncpy(packet.message, input, sizeof(packet.message));
 
+	pthread_mutex_lock(&send_mutex);
 	if (send(client_socket, &packet, sizeof(Packet), 0) < 0)
 	{ // 전송
 		perror("[Client] Failed to send message");
 	}
+	pthread_mutex_unlock(&send_mutex); // unlock
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

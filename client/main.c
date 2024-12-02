@@ -40,6 +40,13 @@ int main() {
     if (file) { // user.txt 파일이 이미 있으면 저장된 유저 정보 사용
         fgets(username, sizeof(username), file);
         username[strcspn(username, "\n")] = '\0';
+        // 서버에 이름 전송
+        login_packet.flag = 1; // 로그인 플래그를 사용하지 않음으로 이미 회원가입이 되있음을 표시
+        strncpy(login_packet.username, username, sizeof(login_packet.username));
+        if (send(client_socket, &login_packet, sizeof(Packet), 0) < 0) {
+            perror("Failed to send username");
+            exit(EXIT_FAILURE);
+        }
         fclose(file);
     } else {  // user.txt 파일이 없음 => 회원가입
         // 사용자 이름 입력

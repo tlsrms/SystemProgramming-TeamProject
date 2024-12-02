@@ -1,23 +1,156 @@
-#include <stdio.h> 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
+#include <pthread.h>
+#include <netinet/in.h>
 #include "includes/common.h"
-#include "includes/version_control.h"
+#include <sys/socket.h>
+#include <unistd.h>
 
-#define PORT 8080
-#define USER_FILE "user.txt"
+int initialize_server(int port, struct sockaddr_in *server_addr);
+void enqueue(Packet packet);
+int dequeue(Packet *packet);
+void* accept_socket(void *);
 
-int client_socket;
-char username[50];
+Client temp_client;
 
-// 작업 큐 정의
-#define QUEUE_SIZE 100
-pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-Packet packet_queue[QUEUE_SIZE];
-int front = 0;
-int rear = 0;
+int main() {
+    // 서버 초기화
+    server_fd = initialize_server(PORT, &server_addr);
+    if (server_fd < 0) {
+        fprintf(stderr, "[Error] Server initialization failed.\n");
+        return EXIT_FAILURE;
+    }
+    printf("[Server] Listening on port %d...\n", PORT);
+
+	pthread_t accept_ClientSocket;
+	pthread_create(&accept_ClientSocket, NULL, accept_socket, NULL);
+
+    Packet current_work;
+    while (1) {
+        // 작업 큐에서 패킷을 읽고 채팅인지 파일인지 확인
+        if (dequeue(&current_work)) {
+			if(current_work.flag == 0){
+				//
+				//로그인 (중복 체크 후 응답 전송(성공 시 채팅 내역, 공유 파일 전송), Client 구조체 생성 및 배열에 추가) <- 1번
+				//
+			}
+            else if (current_work.flag == 1) { // 채팅 메시지
+                // 
+                // 채팅 log 저장 + 채팅 broadcast <- 3번
+                //
+            } else if (current_work.flag == 2) { // 파일 데이터
+				//
+				// 파일 내역 읽고 shared_file.txt에 반영 + 파일 broadcast <- 2번
+				//
+        	}
+			else if(current_work.flag == 3) {
+            // '/commit', '/log', '/rebase' 명령어 처리 <- 4번
+                if (strncmp(current_work.message, "/commit", 7) == 0) {
+                    commit_version();
+                } else if (strncmp(current_work.message, "/log", 4) == 0) {
+                    log_versions();
+                } else if (strncmp(current_work.message, "/rebase", 7) == 0) {
+                    int version_number = atoi(&current_work.message[8]);
+                    rebase_version(version_number);
+                } else {
+                    printf("[Server] Unknown version control command received: %s\n", current_work.message);
+                }
+            }
+			else if(NULL){ //ex) 클라이언트가 아무도 없고 일정 시간 경과
+    			close(server_fd);
+    			return 0;
+			}
+        usleep(10000); // 잠시 대기하여 CPU 사용률 감소 (GPT 추천인데 실제로 써봐야 알 거 같음)
+    	}
+	}
+
+}
+// 서버 초기화
+int initialize_server(int port, struct sockaddr_in *server_addr) {
+    int server_fd;
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        perror("[Server] Socket creation failed");
+        return -1;
+    }
+
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_addr.s_addr = INADDR_ANY;
+    server_addr->sin_port = htons(port);
+
+    if (bind(server_fd, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
+        perror("[Server] Bind failed");
+        close(server_fd);
+        return -1;
+    }
+
+    if (listen(server_fd, MAX_CLIENTS) < 0) {
+        perror("[Server] Listen failed");
+        close(server_fd);
+        return -1;
+    }
+
+    return server_fd;
+}
+
+void* accept_socket(void *arg){
+	int new_sock;
+	struct sockaddr_in client_addr;
+	socklen_t addr_size = sizeof(client_addr);
+	
+	while(1){
+		new_sock = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
+		if (new_sock < 0) {
+			// [Server] accept 호출 실패 시 오류 메시지 출력
+			perror("[Server] Accept failed");
+			break; // accept 실패 시 반복문을 종료함
+		}
+
+		// 클라이언트 소켓을 처리하기 위한 새로운 스레드 생성
+		pthread_t client_thread;
+		if (pthread_create(&client_thread, NULL, receive_packet, (void *)(intptr_t)new_sock) != 0) {
+			perror("[Server] Failed to create client thread");
+			close(new_sock);
+			continue;
+		}
+		temp_client.thread = client_thread; // 클라이언트 패킷 받음 스레드를 메인으로 넘기기 위해
+		pthread_detach(client_thread); // 스레드를 분리하여 리소스를 자동으로 정리할 수 있도록 설정
+	}
+}
+
+void* receive_packet(void *arg) {
+	int client_sock = (int)(intptr_t)arg;
+	Packet packet;
+	int bytes_received;
+
+	while (1) {
+		bytes_received = recv(client_sock, &packet, sizeof(Packet), 0);
+		if (bytes_received < 0) {
+			// [Server] 수신 실패 시 오류 메시지 출력 후 소켓 닫기
+			perror("[Server] Receive failed");
+			close(client_sock);
+			return NULL;
+		} else if (bytes_received == 0) {
+			// 수신된 바이트가 없으면 클라이언트가 정상적으로 연결을 종료한 것으로 간주하고 소켓 닫기
+			printf("[Server] Client disconnected gracefully");
+			close(client_sock);
+			return NULL;
+		}
+		//
+		temp_client.sockfd = client_count; //클라이언트 socketfd main으로 넘기기
+		strcncpy(temp_client.username, packet.username, sizeof(packet.username)); // 유저 이름 main으로 넘기기
+
+		// !!! queue 처리 시간대랑 temp_client 설정 시간대가 안 맞으면 로그인 처리가 이상해짐(수정 필요)
+
+		// 수신된 패킷을 작업 큐에 추가
+		enqueue_packet(packet);
+		printf("[Server] Enqueued packet from client");
+	}
+
+	return NULL;
+}
 
 void enqueue(Packet packet) {
     pthread_mutex_lock(&queue_mutex);
@@ -42,174 +175,4 @@ int dequeue(Packet *packet) {
     return 1;
 }
 
-void *receive_server_packet(void *arg) {
-    Packet packet;
-    while (1) {
-        int bytes_received = recv(client_socket, &packet, sizeof(Packet), 0);
-        if (bytes_received <= 0) {
-            printf("[Client] Disconnected from server.\n");
-            exit(EXIT_FAILURE);
-        }
-        enqueue(packet);
-    }
-    return NULL;
-}
 
-void *send_terminal_packet(void *arg) {
-    Packet packet;
-    while (1) {
-        char input[BUFFER_SIZE];
-        printf("> ");
-        fgets(input, sizeof(input), stdin);
-        input[strcspn(input, "\n")] = '\0';
-
-        if (strncmp(input, "/commit", 7) == 0) {
-            commit_version();
-        } else if (strncmp(input, "/log", 4) == 0) {
-            log_versions();
-        } else if (strncmp(input, "/rebase", 7) == 0) {
-            int version_number = atoi(&input[8]);
-            rebase_version(version_number);
-        } else {
-            packet.flag = 1; // 채팅 메시지 플래그
-            strncpy(packet.username, username, sizeof(packet.username));
-            strncpy(packet.message, input, sizeof(packet.message));
-            send(client_socket, &packet, sizeof(Packet), 0);
-        }
-    }
-    return NULL;
-}
-
-int main() {
-    struct sockaddr_in server_addr;
-    int bytes_received;
-
-    // 1번 소켓 연결
-    client_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (client_socket < 0) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // 임시 IP
-
-    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Connection failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // 2번 thread [서버 패킷 수신] 생성
-    pthread_t thread_receive_server_packet;
-    pthread_create(&thread_receive_server_packet, NULL, receive_server_packet, NULL);
-
-    // 3번 로그인
-    FILE *file = fopen(USER_FILE, "r");
-    Packet login_packet;
-    char buffer[BUFFER_SIZE];
-    if (file) {
-        fgets(username, sizeof(username), file);
-        username[strcspn(username, "\n")] = '\0';
-        fclose(file);
-    } else {
-        while (1) {
-            printf("Enter your username: ");
-            fgets(username, sizeof(username), stdin);
-            username[strcspn(username, "\n")] = '\0';
-
-            login_packet.flag = 0;
-            strncpy(login_packet.username, username, sizeof(login_packet.username));
-            if (send(client_socket, &login_packet, sizeof(Packet), 0) < 0) {
-                perror("Failed to send username");
-                continue;
-            }
-
-            bytes_received = recv(client_socket, buffer, sizeof(buffer), 0);
-            if (bytes_received < 0) {
-                perror("Failed to receive data");
-                exit(EXIT_FAILURE);
-            }
-            buffer[bytes_received] = '\0';
-
-            if (strcmp(buffer, "REGISTERED") == 0) {
-                printf("Registration successful.\n");
-                file = fopen(USER_FILE, "w");
-                if (file) {
-                    fprintf(file, "%s\n", username);
-                    fclose(file);
-                }
-                break;
-            } else if (strcmp(buffer, "DUPLICATE") == 0) {
-                printf("Username already exists. Try another.\n");
-            } else {
-                printf("Error communicating with server.\n");
-            }
-        }
-    }
-
-    // 4번 채팅내역 & 공유파일 불러오기
-    Packet received_packet;
-    Packet chatLog_packet;
-    Packet sharedFile_packet;
-
-    // 채팅 내역 수신
-    bytes_received = recv(client_socket, &received_packet, sizeof(Packet), 0);
-    if (bytes_received <= 0) {
-        perror("Failed to receive chat history");
-        exit(EXIT_FAILURE);
-    }
-    if (received_packet.flag == 1) {
-        chatLog_packet = received_packet;
-    } else {
-        printf("Unexpected packet type for chat history\n");
-    }
-
-    // 공유 파일 수신
-    bytes_received = recv(client_socket, &received_packet, sizeof(Packet), 0);
-    if (bytes_received <= 0) {
-        perror("Failed to receive shared file");
-        exit(EXIT_FAILURE);
-    }
-    if (received_packet.flag == 2) {
-        sharedFile_packet = received_packet;
-        printf("[File Update] Received file data\n");
-        FILE *shared_file = fopen(SHARED_FILE, "w");
-        if (shared_file) {
-            fwrite(sharedFile_packet.file_data, sizeof(char), strlen(sharedFile_packet.file_data), shared_file);
-            fclose(shared_file);
-        } else {
-            perror("Failed to open shared file");
-        }
-    } else {
-        printf("Unexpected packet type for shared file\n");
-    }
-
-    // 6번 thread [터미널 입력 및 패킷 발신] 생성
-    pthread_t thread_send_terminal_packet;
-    pthread_create(&thread_send_terminal_packet, NULL, send_terminal_packet, NULL);
-
-    // 8번 메인 스레드 작업
-    Packet current_work;
-    while (1) {
-        if (dequeue(&current_work)) {
-            if (current_work.flag == 1) {
-                printf("[%s]: %s\n", current_work.username, current_work.message);
-            } else if (current_work.flag == 2) {
-                printf("[File Update] Applying file data update\n");
-                FILE *shared_file = fopen(SHARED_FILE, "w");
-                if (shared_file) {
-                    fwrite(current_work.file_data, sizeof(char), strlen(current_work.file_data), shared_file);
-                    fclose(shared_file);
-                } else {
-                    perror("Failed to open shared file");
-                }
-            } else {
-                printf("Unknown packet type in queue\n");
-            }
-        }
-        usleep(10000);
-    }
-
-    return 0;
-}

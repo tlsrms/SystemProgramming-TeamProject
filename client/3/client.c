@@ -115,11 +115,14 @@ void *send_terminal_packet(void *arg)
 		else if (strcmp(input, "/quit") == 0)
 		{
 			command_quit(); // 서버와의 연결 종료
-			break;
 		}
 		else
 		{
 			send_chat_message(input); // 채팅 메시지 전송
+		}
+
+		if (!keep_running) {
+			return;
 		}
 	}
 
@@ -184,6 +187,7 @@ void command_load(const char *input)
 
 void command_quit()
 {
+	keep_running = 0;
 	printf("[Client] Exiting...\n");
 	close(client_socket);
 }

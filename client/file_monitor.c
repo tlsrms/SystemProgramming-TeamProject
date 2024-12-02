@@ -54,8 +54,8 @@ void *watch_file(void *arg){
                 }
             }
             i += EVENT_SIZE + event->len;
-            usleep(10000);
         }
+        usleep(10000);
     }
     fclose(inotify_fd); //스레드 종료 시 inotify도 자원해제
 }

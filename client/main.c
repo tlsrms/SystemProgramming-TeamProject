@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include "includes/common.h"	
+#include "includes/common.h"
 
 void enqueue(Packet packet);
 int dequeue(Packet *packet);
@@ -43,10 +43,12 @@ int main() {
         // 서버에 이름 전송
         login_packet.flag = 1; // 로그인 플래그를 사용하지 않음으로 이미 회원가입이 되있음을 표시
         strncpy(login_packet.username, username, sizeof(login_packet.username));
+        pthread_mutex_lock(&send_mutex);
         if (send(client_socket, &login_packet, sizeof(Packet), 0) < 0) {
             perror("Failed to send username");
             exit(EXIT_FAILURE);
         }
+        pthread_mutex_unlock(&send_mutex);
         fclose(file);
     } else {  // user.txt 파일이 없음 => 회원가입
         // 사용자 이름 입력
@@ -58,10 +60,12 @@ int main() {
             // 서버에 이름 전송
             login_packet.flag = 0; // 로그인 플래그
             strncpy(login_packet.username, username, sizeof(login_packet.username));
+            pthread_mutex_lock(&send_mutex);
             if (send(client_socket, &login_packet, sizeof(Packet), 0) < 0) {
                 perror("Failed to send username");
                 continue;
             }
+            pthread_mutex_unlock(&send_mutex);
 
             // 서버 응답 대기
             bytes_received = recv(client_socket, buffer, sizeof(buffer), 0);
@@ -139,9 +143,8 @@ int main() {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     /////////////////// 7번 thread [클라이언트 파일 변경 감지 및 파일 전송] 생성 /////////////////
-    //
-    // 스레드 생성
-    //
+	pthread_t thread_inotify_file_and_send_packet; // 클라이언트 파일 변경을 감지하고 변경 시 파일을 전송하는 스레드
+    pthread_create(&thread_inotify_file_and_send_packet, NULL, watch_file, NULL);
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     //////////////////////////////////// 8번 메인 스레드 작업 ////////////////////////////////////
@@ -165,6 +168,13 @@ int main() {
             } else {
                 printf("Unknown packet type in queue\n");
             }
+        }
+
+        if(!keep_running){
+            pthread_join(thread_receive_server_packet, NULL);
+            pthread_join(thread_send_terminal_packet, NULL);
+            pthread_join(thread_inotify_file_and_send_packet, NULL);
+            return 0;
         }
         usleep(10000); // 잠시 대기하여 CPU 사용률 감소 (GPT 추천인데 실제로 써봐야 알 거 같음)
     }

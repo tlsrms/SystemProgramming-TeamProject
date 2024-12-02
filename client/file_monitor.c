@@ -15,6 +15,51 @@
 #define WATCH_DIRECTORY "./watch/"
 #define FILE_NAME_SIZE 64
 
+void *watch_file(void *arg){
+    pthread_mutex_lock(&client_mutex);
+    int sockfd = client_socket;
+    char name[50];
+    snprintf(name, sizeof(name), "%s", username);
+    pthread_mutex_unlock(&client_mutex);
+
+    int inotify_fd = init_inotify();
+    char buffer[EVENT_BUF_LEN];
+    int length;
+
+    while(1){
+        length = read(inotify_fd, buffer, EVENT_BUF_LEN);
+
+        if(length == 0){
+            continue;
+        }
+        else if(length < 0){
+            perror("fail to read event");
+            exit(EXIT_FAILURE);
+        }
+
+        int i = 0;
+        while (i < length) {
+            struct inotify_event *event = (struct inotify_event *)&buffer[i];
+            if (event->len) {
+                char file_path[512];
+                snprintf(file_path, sizeof(file_path), "%s%s", WATCH_DIRECTORY, event->name);
+
+                if (event->mask & IN_CREATE) {
+                    //printf("New file %s created.\n", event->name);
+                    send_file_to_server(file_path, sockfd, name);
+                } else if (event->mask & IN_MODIFY) {
+                    //printf("File %s modified.\n", event->name);
+                    sleep(1); // 잠시 기다리기
+                    send_file_to_server(file_path, sockfd ,name);
+                }
+            }
+            i += EVENT_SIZE + event->len;
+            usleep(10000);
+        }
+    }
+    fclose(inotify_fd); //스레드 종료 시 inotify도 자원해제
+}
+
 int init_inotify() {
     // watch directory가 없으면 생성
     struct stat st = {0};
@@ -40,73 +85,49 @@ int init_inotify() {
     return inotify_fd;
 }
 
-void handle_inotify_events(int inotify_fd, int socket_fd, char *username) {
-    char buffer[EVENT_BUF_LEN];
-    int length = read(inotify_fd, buffer, EVENT_BUF_LEN);
-
-    if (length < 0) {
-        perror("read");
-    }
-
-    int i = 0;
-    while (i < length) {
-        struct inotify_event *event = (struct inotify_event *)&buffer[i];
-        if (event->len) {
-            char file_path[512];
-            snprintf(file_path, sizeof(file_path), "%s%s", WATCH_DIRECTORY, event->name);
-
-            if (event->mask & IN_CREATE) {
-                printf("New file %s created.\n", event->name);
-                send_file_to_server(file_path, socket_fd, username);
-            } else if (event->mask & IN_DELETE) {
-                printf("File %s deleted.\n", event->name);
-            } else if (event->mask & IN_MODIFY) {
-                printf("File %s modified.\n", event->name);
-				sleep(1); // 잠시 기다리기
-                send_file_to_server(file_path, socket_fd,username);
-            }
-        }
-        i += EVENT_SIZE + event->len;
-    }
-}
-
-int send_file_to_server(const char* file_path, int socket_fd, char *username) {
-    FILE *file = fopen(file_path, "rb");
-    if (!file) {
-        perror("fopen");
-        return -1;
-    }
-
+int send_file_to_server(const char* file_path, int socket_fd, char *uname) {
     size_t bytes_read;
 	Packet new_packet = {0};
 	new_packet.flag = 1;
-	strcpy(new_packet.username, username);
+	snprintf(new_packet.username, sizeof(new_packet.username), "%s", uname);
 
-
+    pthread_mutex_lock(&file_mutex);
+    FILE *file = fopen(file_path, "r");
+    if (!file) {
+        perror("fopen");
+        pthread_mutex_unlock(&file_mutex);
+        return -1;
+    }
+    
     if((bytes_read = fread(new_packet.file_data, 1, sizeof(new_packet.file_data), file)) == 0){
 		perror("fread");
 		fclose(file);
+        pthread_mutex_unlock(&file_mutex);
 		return -1;
 	}
+    fclose(file);
+    pthread_mutex_unlock(&file_mutex);
+
  
+    pthread_mutex_lock(&send_mutex);
     if (send(socket_fd, &new_packet, sizeof(Packet), 0) < 0) {
             perror("send");
-            fclose(file);
+            pthread_mutex_lock(&send_mutex);
             return -1;
     }
+    pthread_mutex_lock(&send_mutex);
 
-    fclose(file);
     return 0;
 }
 
-int apply_to_file(const char* save_path, Packet recieved_packet) {
-    FILE *file = fopen(save_path, "wb");
+int apply_to_file(char* save_path, Packet *recieved_packet) {
+    FILE *file = fopen(save_path, "w");
     if (!file) {
         perror("fopen");
         return -1;
     }
 
-	if (fwrite(&recieved_packet.file_data, 1,sizeof(recieved_packet.file_data) , file) == 0) {
+	if (fwrite(&recieved_packet->file_data, 1,sizeof(recieved_packet->file_data) , file) == 0) {
 		perror("fwrite");
 		fclose(file);
 		return -1;
@@ -114,72 +135,4 @@ int apply_to_file(const char* save_path, Packet recieved_packet) {
 
     fclose(file);
     return 0;
-}
-
-int handle_command(const char* command, const char* parameter, char* file_path_buffer){
-	char file_name[FILE_NAME_SIZE];
-
-    if (strcmp(command, "/new") == 0) {
-
-        printf("Creating new file: %s\n", parameter);
-		snprintf(file_path_buffer, sizeof(file_path_buffer), "%s%s", WATCH_DIRECTORY, parameter);
-
-        FILE *file = fopen(file_path_buffer, "w");
-        if (!file) {
-            perror("fopen");
-            exit(EXIT_FAILURE);
-        }
-        fclose(file);
-
-        return 0;
-
-    } else if (strcmp(command, "/load") == 0) {
-        printf("Loading file: %s\n", parameter);
-
-		get_filename(parameter, file_name);
-		snprintf(file_path_buffer, sizeof(file_path_buffer), "%s%s", WATCH_DIRECTORY, file_name);
-
-        copy_file(parameter, file_path_buffer);
-        return 0;
-
-    } else {
-        fprintf(stderr, "Unknown command: %s\n", command);
-        exit(EXIT_FAILURE);
-    }
-} 
-
-int copy_file(const char* source, const char* destination) {
-    FILE *src = fopen(source, "rb");
-    if (!src) {
-        perror("fopen source");
-        return -1;
-    }
-    
-    FILE *dest = fopen(destination, "wb");
-    if (!dest) {
-        perror("fopen destination");
-        fclose(src);
-        return -1;
-    }
-
-    char buffer[1024];
-    size_t bytes;
-    while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {
-        if (fwrite(buffer, 1, bytes, dest) != bytes) {
-            perror("fwrite");
-            fclose(src);
-            fclose(dest);
-            return -1;
-        }
-    }
-
-    fclose(src);
-    fclose(dest);
-    return 0;
-}
-
-void get_filename(const char *path, char* file_name_buffer) {
-    char *filename = strrchr(path, '/');
-    filename ? filename + 1 : (char *)path;
-	strcpy(file_name_buffer, filename);
 }

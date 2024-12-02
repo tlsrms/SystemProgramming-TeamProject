@@ -11,17 +11,10 @@
 #include <sys/socket.h>     // 소켓 관련 함수 사용
 #include <string.h>   
 
-// inotify 초기화 및 디렉토리 감시 설정
-int init_inotify();
+void *watch_file(void *arg); //(스레드 핸들러)
 
-// inotify 이벤트 핸들러 (스레드에 넣어야함)
-void handle_inotify_events(int inotify_fd, int socket_fd, char *username);
-
-// 파일 수신 (스레드에 넣어야함)
-int apply_to_file(const char* save_path, Packet recieved_packet);
-
-// 명령어 처리 함수
-int handle_command(const char* command, const char* parameter, char* file_path_buffer);
+// 파일 적용
+int apply_to_file(char* save_path, Packet* recieved_packet);
 
 
 #endif

@@ -119,6 +119,7 @@ int main() {
         sharedFile_packet = received_packet;
         printf("[File Update] Received file data\n");
         // 공유 파일에 파일 데이터를 저장
+        pthread_mutex_lock(&file_mutex);
         FILE *shared_file = fopen(SHARED_FILE, "w");
         if (shared_file) {
             fwrite(sharedFile_packet.file_data, sizeof(char), strlen(sharedFile_packet.file_data), shared_file);
@@ -126,6 +127,7 @@ int main() {
         } else {
             perror("Failed to open shared file");
         }
+        pthread_mutex_unlock(&file_mutex);
     } else {
         printf("Unexpected packet type for shared file\n");
     }
@@ -158,6 +160,7 @@ int main() {
                 //
             } else if (current_work.flag == 2) { // 파일 데이터
                 printf("[File Update] Applying file data update\n");
+                pthread_mutex_lock(&file_mutex);
                 FILE *shared_file = fopen(SHARED_FILE, "w");
                 if (shared_file) {
                     fwrite(current_work.file_data, sizeof(char), strlen(current_work.file_data), shared_file);
@@ -165,6 +168,7 @@ int main() {
                 } else {
                     perror("Failed to open shared file");
                 }
+                pthread_mutex_unlock(&file_mutex);
             } else {
                 printf("Unknown packet type in queue\n");
             }

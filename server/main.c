@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <signal.h>
 #include "includes/common.h"
 #include "includes/login_control.h"
 #include "includes/broadcast.h"
@@ -20,6 +21,8 @@ void send_initial_data(int client_sock);
 int find_current_sockfd(Packet *);
 
 int main() {
+    signal(SIGINT, handle_sigint); //ctrl + c 입력이 들어오면 keep_running 값이 0으로 바뀌고 while문이 종료됩니다.
+
     // 서버 초기화
     server_fd = initialize_server(PORT, &server_addr);
     if (server_fd < 0) {
@@ -32,7 +35,7 @@ int main() {
 	pthread_create(&accept_ClientSocket, NULL, accept_socket, NULL);
 
     Packet current_work;
-    while (1) {
+    while (!keep_running) {
         // 작업 큐에서 패킷을 읽고 채팅인지 파일인지 확인
         if (dequeue(&current_work)) {
             if (current_work.flag == 1) { // 채팅 메시지
@@ -59,14 +62,26 @@ int main() {
                     printf("[Server] Unknown version control command received: %s\n", current_work.message);
                 }
 			}
-			else if(NULL){ //ex) 클라이언트가 아무도 없고 일정 시간 경과
-    			close(server_fd);
-    			return 0;
-			}
-        usleep(10000); // 잠시 대기하여 CPU 사용률 감소 (GPT 추천인데 실제로 써봐야 알 거 같음)
+            usleep(10000); // 잠시 대기하여 CPU 사용률 감소 (GPT 추천인데 실제로 써봐야 알 거 같음)
     	}
 	}
 
+    //while문 종료 후 자원해제 코드
+    close(server_fd); //서버 소켓이 닫기면 accept(), recv() 함수에서 -1이 반환됨 -> 각 스레드 종료됨.
+
+    //모든 스레드가 정상 종료 되기를 기다림
+    pthread_join(accept_ClientSocket, NULL);
+    for (int i = 0; i < client_count; i++) {
+        pthread_join(clients[i].thread, NULL);
+    }
+
+    // 뮤텍스 자원 해제
+    pthread_mutex_destroy(&send_mutex);
+    pthread_mutex_destroy(&queue_mutex);
+    pthread_mutex_destroy(&clients_mutex);
+    printf("[Server] Successfully shut down.\n");
+
+    return 0; //서버 프로그램 종료
 }
 // 서버 초기화
 int initialize_server(int port, struct sockaddr_in *server_addr) {
@@ -129,6 +144,8 @@ void* accept_socket(void *arg){
 		}
 		pthread_detach(client_thread); // 스레드를 분리하여 리소스를 자동으로 정리할 수 있도록 설정
 	}
+
+    return NULL;
 }
 
 void* receive_packet(void *arg) {
@@ -146,11 +163,15 @@ void* receive_packet(void *arg) {
         bytes_received = recv(client_sock, &packet, sizeof(Packet), 0);
 		if(bytes_received <= 0) {
 			if (bytes_received < 0) {
-				// [Server] 수신 실패 시 오류 메시지 출력 후 소켓 닫기
+				// [Server] 수신 실패 / server_sock이 close될 시 오류 메시지 출력 후 소켓 닫기 후 break
 				perror("[Server] Receive failed");
+                close(client_sock); // 클라이언트 소켓 닫기
+                break; // 스레드 종료
 			} else if (bytes_received == 0) {
 				// 수신된 바이트가 없으면 클라이언트가 정상적으로 연결을 종료한 것으로 간주하고 소켓 닫기
 				printf("[Server] Client disconnected gracefully");
+                close(client_sock);
+                break; //스레드 종료
 			}
 			if(is_logged_in)
 				remove_client(client_sock);
@@ -169,7 +190,9 @@ void* receive_packet(void *arg) {
 
                 if (duplicate) {
                     // 실패 응답 전송
+                    pthread_mutex_lock(&send_mutex);
                     send(client_sock, "DUPLICATE", 9, 0);
+                    pthread_mutex_unlock(&send_mutex);
                     pthread_mutex_unlock(&clients_mutex);
                     // 로그인 실패 시 다시 로그인 패킷을 받을 수 있도록 계속 루프 진행
                     continue;
@@ -181,8 +204,10 @@ void* receive_packet(void *arg) {
 					is_logged_in = 1; // 로그인 성공
                 	pthread_mutex_unlock(&clients_mutex);
 					// 성공 응답 전송
+                    pthread_mutex_lock(&send_mutex);
 					send(client_sock, "REGISTERED", 10, 0); // 등록 성공 응답
 					// 초기 데이터 전송 (채팅 로그와 공유 파일)
+                    pthread_mutex_unlock(&send_mutex);
                     send_initial_data(client_sock);
                     printf("[Server] New user registered: %s\n", temp_client.username);
                 }
@@ -216,7 +241,9 @@ void send_initial_data(int client_sock) {
     if (log_file) {
         fgets(packet.message, sizeof(packet.message), log_file);
 		packet.flag = 1; // 채팅 메시지 플래그
+        pthread_mutex_lock(&send_mutex);
 		send(client_sock, &packet, sizeof(Packet), 0);
+        pthread_mutex_unlock(&send_mutex);
         fclose(log_file);
     }
     pthread_mutex_unlock(&file_mutex);
@@ -227,7 +254,9 @@ void send_initial_data(int client_sock) {
     if (shared_file) {
         fgets(packet.file_data, sizeof(packet.file_data), shared_file);
 		packet.flag = 2; // 파일 데이터 플래그
+        pthread_mutex_lock(&send_mutex);
 		send(client_sock, &packet, sizeof(Packet), 0);
+        pthread_mutex_unlock(&send_mutex);
         fclose(shared_file);
     }
     pthread_mutex_unlock(&file_mutex);
@@ -269,4 +298,8 @@ int find_current_sockfd(Packet *current_packet){
 	printf("can't find client_sockfd");
     pthread_mutex_unlock(&clients_mutex);
 	return -1;
+}
+
+void handle_sigint(int sig) {
+    keep_running = 0;
 }

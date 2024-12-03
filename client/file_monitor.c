@@ -16,17 +16,21 @@
 #define FILE_NAME_SIZE 64
 
 void *watch_file(void *arg){
-    pthread_mutex_lock(&client_mutex);
+    pthread_mutex_lock(&global_mutex);
     int sockfd = client_socket;
     char name[50];
     snprintf(name, sizeof(name), "%s", username);
-    pthread_mutex_unlock(&client_mutex);
+    pthread_mutex_unlock(&global_mutex);
 
     int inotify_fd = init_inotify();
     char buffer[EVENT_BUF_LEN];
     int length;
 
     while(1){
+        if(!keep_running){
+            fclose(inotify_fd); //스레드 종료 시 inotify도 자원해제
+            return NULL;
+        }
         length = read(inotify_fd, buffer, EVENT_BUF_LEN);
 
         if(length == 0){
@@ -57,7 +61,7 @@ void *watch_file(void *arg){
         }
         usleep(10000);
     }
-    fclose(inotify_fd); //스레드 종료 시 inotify도 자원해제
+    
 }
 
 int init_inotify() {

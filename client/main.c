@@ -169,6 +169,10 @@ int main() {
                     perror("Failed to open shared file");
                 }
                 pthread_mutex_unlock(&file_mutex);
+            } else if(current_work.flag == 3) {
+                //
+                // version log 띄우기
+                //
             } else {
                 printf("Unknown packet type in queue\n");
             }
@@ -178,6 +182,10 @@ int main() {
             pthread_join(thread_receive_server_packet, NULL);
             pthread_join(thread_send_terminal_packet, NULL);
             pthread_join(thread_inotify_file_and_send_packet, NULL);
+            pthread_mutex_destroy(&global_mutex);
+            pthread_mutex_destroy(&send_mutex);
+            pthread_mutex_destroy(&file_mutex);
+            pthread_mutex_destroy(&queue_mutex);
             return 0;
         }
         usleep(10000); // 잠시 대기하여 CPU 사용률 감소 (GPT 추천인데 실제로 써봐야 알 거 같음)

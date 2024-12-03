@@ -74,7 +74,7 @@ void commit_version() {
 }
 
 // 저장된 모든 버전을 표시 (/log 명령어)
-void log_versions() {
+void log_versions(Packet *current_packet, int client_sock) {
     pthread_mutex_lock(&version_mutex);
 
     struct dirent *entry;
@@ -102,6 +102,11 @@ void log_versions() {
     }
     closedir(dp);
 
+    Packet packet;
+    packet.flag = 3;
+    strncpy(packet.username, current_packet->username, sizeof(packet.username));
+    char log_buffer[BUFFER_SIZE] = "";
+
     // 파일 목록 역순 출력
     for (int i = entry_count - 1; i >= 0; i--) {
         snprintf(filename, sizeof(filename), "%s%s", VERSION_DIR, entries[i]->d_name);
@@ -112,16 +117,24 @@ void log_versions() {
             tm_info = localtime(&t);
             char time_buffer[30];
             strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", tm_info);
-            printf("Version: %s\tDate: %s\n", entries[i]->d_name, time_buffer);
+            char entry_log[MAX_FILENAME_LEN + 50];
+            snprintf(entry_log, sizeof(entry_log), "Version: %s\tDate: %s\n", entries[i]->d_name, time_buffer);
+            strncat(log_buffer, entry_log, sizeof(log_buffer) - strlen(log_buffer) - 1);
             fclose(file);
         }
     }
+
+    strncpy(packet.file_data, log_buffer, sizeof(packet.file_data));
+
+    pthread_mutex_lock(&send_mutex);
+    send(client_sock, &packet, sizeof(Packet), 0);
+    pthread_mutex_unlock(&send_mutex);
 
     pthread_mutex_unlock(&version_mutex);
 }
 
 // 특정 버전으로 복원 (/rebase 명령어)
-void rebase_version(int version_number) {
+void rebase_version(int version_number, Packet *current_packet, int client_sock) {
     pthread_mutex_lock(&version_mutex);
 
     char versioned_file[MAX_FILENAME_LEN];
@@ -154,5 +167,22 @@ void rebase_version(int version_number) {
     fclose(dest_file);
 
     printf("[Server] File rebased to version %d successfully.\n", version_number);
+
+    // 버전 복원 후 클라이언트에 전송
+    Packet packet;
+    packet.flag = 2;
+    strncpy(packet.username, current_packet->username, sizeof(packet.username));
+    snprintf(packet.message, sizeof(packet.message), "Rebased to version %d", version_number);
+
+    FILE *file_to_send = fopen(SHARED_FILE, "r");
+    if (file_to_send) {
+        fread(packet.file_data, sizeof(char), BUFFER_SIZE, file_to_send);
+        fclose(file_to_send);
+
+        pthread_mutex_lock(&send_mutex);
+        broadcast_packet(&packet, -1); // -1은 모든 클라이언트를 의미함
+        pthread_mutex_unlock(&send_mutex);
+    }
+
     pthread_mutex_unlock(&version_mutex);
 }

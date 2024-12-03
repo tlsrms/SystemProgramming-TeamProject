@@ -10,6 +10,7 @@
 #define USER_FILE "user.txt"
 #define SHARED_FILE "./watch/shared_file.txt"
 #define FILE_NAME_SIZE 64
+#define FILE_PATH_SIZE 128
 
 // 패킷 구조체 정의
 typedef struct

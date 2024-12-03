@@ -3,10 +3,13 @@
 #include <string.h>
 #include <pthread.h>
 #include <netinet/in.h>
-#include "includes/common.h"
 #include <sys/socket.h>
 #include <unistd.h>
-#include "includes/client_handler.h"
+#include "includes/common.h"
+#include "includes/login_control.h"
+#include "includes/broadcast.h"
+#include "includes/file_sync.h"
+#include "includes/version_control.h"
 
 int initialize_server(int port, struct sockaddr_in *server_addr);
 void enqueue(Packet packet);
@@ -14,6 +17,7 @@ int dequeue(Packet *packet);
 void* accept_socket(void *);
 void* receive_packet(void *arg);
 void send_initial_data(int client_sock);
+int find_current_sockfd(Packet *);
 
 int main() {
     // 서버 초기화
@@ -31,34 +35,51 @@ int main() {
     while (1) {
         // 작업 큐에서 패킷을 읽고 채팅인지 파일인지 확인
         if (dequeue(&current_work)) {
-			if(current_work.flag == 0){
-				//
-				//로그인 (중복 체크 후 응답 전송(성공 시 채팅 내역, 공유 파일 전송), Client 구조체 생성 및 배열에 추가) <- 1번
-				//receive_packet에서 구현
-				continue;
-			}
-            else if (current_work.flag == 1) { // 채팅 메시지
+            if (current_work.flag == 1) { // 채팅 메시지
                 // 
                 // 채팅 log 저장 + 채팅 broadcast <- 3번
                 //
             } else if (current_work.flag == 2) { // 파일 데이터
 				//
 				// 파일 내역 읽고 shared_file.txt에 반영 + 파일 broadcast <- 2번
+				handle_file_packet(&current_work, find_packet_sock(&current_work));
 				//
         	}
-			else if(current_work.flag == 3) {
-            // '/commit', '/log', '/rebase' 명령어 처리 <- 4번
+			else if (current_work.flag == 3) {
                 if (strncmp(current_work.message, "/commit", 7) == 0) {
                     commit_version();
                 } else if (strncmp(current_work.message, "/log", 4) == 0) {
-                    log_versions();
+                    int client_sock = find_current_sockfd(&current_work);
+                    if (client_sock != -1) {
+                        log_versions(&current_work, client_sock);
+                    }
                 } else if (strncmp(current_work.message, "/rebase", 7) == 0) {
                     int version_number = atoi(&current_work.message[8]);
-                    rebase_version(version_number);
+                    int client_sock = find_current_sockfd(&current_work);
+                    if (client_sock != -1) {
+                        rebase_version(version_number, &current_work, client_sock);
+                    }
                 } else {
                     printf("[Server] Unknown version control command received: %s\n", current_work.message);
                 }
             }
+설명:
+
+log_versions() 호출:
+
+log_versions()를 호출할 때, current_work 패킷과 client_sock을 함께 전달하도록 수정했습니다. client_sock은 해당 클라이언트의 소켓 파일 디스크립터로, 이 소켓을 통해 로그 정보를 보냅니다.
+rebase_version() 호출:
+
+rebase_version()도 마찬가지로 current_packet과 client_sock을 함께 전달하도록 수정했습니다. 이로써 특정 버전으로 복원한 후 해당 클라이언트에게 복원 완료 메시지와 파일을 전송합니다.
+이 수정으로 server/main.c와 server/version_control.c이 일관되게 작동하며, 명령어 처리 과정에서 클라이언트에게 제대로 응답할 수 있게 됩니다.
+
+
+
+
+
+
+
+
 			else if(NULL){ //ex) 클라이언트가 아무도 없고 일정 시간 경과
     			close(server_fd);
     			return 0;
@@ -110,11 +131,21 @@ void* accept_socket(void *arg){
 			break; // accept 실패 시 반복문을 종료함
 		}
 
+        int *client_sock_ptr = malloc(sizeof(int));
+        if (client_sock_ptr == NULL) {
+            perror("[Server] malloc failed");
+            free(client_sock_ptr);
+            close(new_sock);
+            continue;
+        }
+        *client_sock_ptr = new_sock;
+
+
 		// 클라이언트 소켓을 처리하기 위한 새로운 스레드 생성
 		pthread_t client_thread;
-		if (pthread_create(&client_thread, NULL, receive_packet, (void *)(intptr_t)new_sock) != 0) {
+		if (pthread_create(&client_thread, NULL, receive_packet, client_sock_ptr) != 0) {
 			perror("[Server] Failed to create client thread");
-			close(new_sock);
+			close(new_sock); 
 			continue;
 		}
 		pthread_detach(client_thread); // 스레드를 분리하여 리소스를 자동으로 정리할 수 있도록 설정
@@ -122,7 +153,8 @@ void* accept_socket(void *arg){
 }
 
 void* receive_packet(void *arg) {
-	int client_sock = (int)(intptr_t)arg;
+	int client_sock = *(int*)arg;
+    free(arg);
 	Packet packet;
 	int bytes_received;
 	Client temp_client; // 로컬 변수로 선언
@@ -177,19 +209,9 @@ void* receive_packet(void *arg) {
                 }
             } else {
                 // 로그인 없이 접속한 경우 (user.txt에 이름이 이미 있음)
-                // 클라이언트 배열에 해당 사용자명으로 등록되어 있는지 확인
                 pthread_mutex_lock(&clients_mutex);
-                int found = 0;
-                for (int i = 0; i < client_count; i++) {
-                    if (strcmp(clients[i].username, temp_client.username) == 0) {
-                        found = 1;
-                        break;
-                    }
-                }
-                if (!found) {
-                    // 클라이언트 배열에 추가
-                    clients[client_count++] = temp_client;
-                }
+                // 클라이언트 배열에 추가
+                clients[client_count++] = temp_client;
                 pthread_mutex_unlock(&clients_mutex);
                 is_logged_in = 1;
 
@@ -253,4 +275,19 @@ int dequeue(Packet *packet) {
     front = (front + 1) % QUEUE_SIZE;
     pthread_mutex_unlock(&queue_mutex);
     return 1;
+}
+
+int find_current_sockfd(Packet *current_packet){
+	int temp_socketfd;
+	pthread_mutex_lock(&clients_mutex);
+	for(int i=0; i<client_count; i++){
+		if(strcmp(clients[i].username, current_packet->username) == 0)
+			temp_socketfd = clients[i].sockfd;
+			pthread_mutex_unlock(&clients_mutex);
+			return temp_socketfd;
+	}
+
+	printf("can't find client_sockfd");
+    pthread_mutex_unlock(&clients_mutex);
+	return -1;
 }

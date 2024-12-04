@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
+#include <unistd.h>  // recv 함수 사용을 위해 필요
+#include <stdlib.h>  // malloc과 free 함수 사용을 위해 필요 (옵션)
+
+#define FILE_NAME_SIZE 64
+#define FILE_PATH_SIZE 128
+
+#define CHAT_LOG "chat_log.txt"
+#define FILE_LOG "file_log.txt"
 
 #define BUFFER_SIZE 4096
 

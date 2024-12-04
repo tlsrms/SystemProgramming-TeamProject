@@ -4,6 +4,9 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include "includes/common.h"
+#include "includes/receive_handler.h"
+#include "includes/send_handler.h"
+#include "includes/file_monitor.h"
 
 void enqueue(Packet packet);
 int dequeue(Packet *packet);
@@ -160,15 +163,7 @@ int main() {
                 //
             } else if (current_work.flag == 2) { // 파일 데이터
                 printf("[File Update] Applying file data update\n");
-                pthread_mutex_lock(&file_mutex);
-                FILE *shared_file = fopen(SHARED_FILE, "w");
-                if (shared_file) {
-                    fwrite(current_work.file_data, sizeof(char), strlen(current_work.file_data), shared_file);
-                    fclose(shared_file);
-                } else {
-                    perror("Failed to open shared file");
-                }
-                pthread_mutex_unlock(&file_mutex);
+                apply_to_file(SHARED_FILE, &current_work);
             } else if(current_work.flag == 3) {
                 //
                 // version log 띄우기
@@ -193,27 +188,4 @@ int main() {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     return 0;
-}
-
-void enqueue(Packet packet) {
-    pthread_mutex_lock(&queue_mutex);
-    if ((rear + 1) % QUEUE_SIZE == front) {
-        printf("Queue is full\n");
-    } else {
-        packet_queue[rear] = packet;
-        rear = (rear + 1) % QUEUE_SIZE;
-    }
-    pthread_mutex_unlock(&queue_mutex);
-}
-
-int dequeue(Packet *packet) {
-    pthread_mutex_lock(&queue_mutex);
-    if (front == rear) {
-        pthread_mutex_unlock(&queue_mutex);
-        return 0;
-    }
-    *packet = packet_queue[front];
-    front = (front + 1) % QUEUE_SIZE;
-    pthread_mutex_unlock(&queue_mutex);
-    return 1;
 }

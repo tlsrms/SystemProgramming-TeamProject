@@ -59,7 +59,7 @@ int main() {
                     int version_number = atoi(&current_work.message[8]);
                     rebase_version(version_number);
                 } else {
-                    printf("[Server] Unknown version control command received: %s\n", current_work.message);
+                    printf("[Server] Unknown version control command received: %s\n",current_work.message);
                 }
 			}
             usleep(10000); // 잠시 대기하여 CPU 사용률 감소 (GPT 추천인데 실제로 써봐야 알 거 같음)
@@ -162,22 +162,16 @@ void* receive_packet(void *arg) {
     while (1) {
         bytes_received = recv(client_sock, &packet, sizeof(Packet), 0);
 		if(bytes_received <= 0) {
-			if (bytes_received < 0) {
-				// [Server] 수신 실패 / server_sock이 close될 시 오류 메시지 출력 후 소켓 닫기 후 break
-				perror("[Server] Receive failed");
-                close(client_sock); // 클라이언트 소켓 닫기
-                break; // 스레드 종료
-			} else if (bytes_received == 0) {
-				// 수신된 바이트가 없으면 클라이언트가 정상적으로 연결을 종료한 것으로 간주하고 소켓 닫기
-				printf("[Server] Client disconnected gracefully");
-                close(client_sock);
-                break; //스레드 종료
-			}
+			if (bytes_received == 0)
+				printf("[Server] Client disconnected gracefully"); // 수신된 바이트가 없으면 클라이언트가 정상적으로 연결을 종료한 것으로 간주하고 소켓 닫기
+			else if (bytes_received < 0)
+				perror("[Server] Receive failed or Server socket is closed"); // [Server] 수신 실패 / server_sock이 close될 시 오류 메시지 출력 후 소켓 닫기 후 break
+            
 			if(is_logged_in)
 				remove_client(client_sock);
 			else 
 				close(client_sock);
-			return NULL;
+			break;
 		}
 
         if (!is_logged_in) {

@@ -116,15 +116,16 @@ int send_file_to_server(const char* file_path, int socket_fd, char *uname) {
     pthread_mutex_lock(&send_mutex);
     if (send(socket_fd, &new_packet, sizeof(Packet), 0) < 0) {
             perror("send");
-            pthread_mutex_lock(&send_mutex);
+            pthread_mutex_unlock(&send_mutex);
             return -1;
     }
-    pthread_mutex_lock(&send_mutex);
+    pthread_mutex_unlock(&send_mutex);
 
     return 0;
 }
 
 int apply_to_file(char* save_path, Packet *recieved_packet) {
+    pthread_mutex_lock(&file_mutex);
     FILE *file = fopen(save_path, "w");
     if (!file) {
         perror("fopen");
@@ -138,5 +139,6 @@ int apply_to_file(char* save_path, Packet *recieved_packet) {
 	}
 
     fclose(file);
+    pthread_mutex_unlock(&file_mutex);
     return 0;
 }

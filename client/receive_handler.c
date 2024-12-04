@@ -14,7 +14,7 @@ void *receive_server_packet(void *arg)
 		if (bytes_received <= 0)
 		{
 			printf("[Client] Disconnected from server.\n");
-			exit(EXIT_FAILURE);
+			return NULL;
 		}
 
 		// 패킷 정보를 메인스레드의 작업큐로 보내는 코드

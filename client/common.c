@@ -9,16 +9,11 @@ pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int keep_running = 1;
 
+// 작업큐
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 Packet packet_queue[QUEUE_SIZE];
 int front = 0;
 int rear = 0;
-
-// 전역 변수 정의
-int client_socket;
-struct sockaddr_in server_addr;
-char username[50];
-
 void enqueue(Packet packet) {
     pthread_mutex_lock(&queue_mutex);
     if ((rear + 1) % QUEUE_SIZE == front) {
@@ -41,3 +36,8 @@ int dequeue(Packet *packet) {
     pthread_mutex_unlock(&queue_mutex);
     return 1;
 }
+
+// 전역 변수 정의
+int client_socket;
+struct sockaddr_in server_addr;
+char username[50];

@@ -19,3 +19,25 @@ int client_socket;
 struct sockaddr_in server_addr;
 char username[50];
 
+void enqueue(Packet packet) {
+    pthread_mutex_lock(&queue_mutex);
+    if ((rear + 1) % QUEUE_SIZE == front) {
+        printf("Queue is full\n");
+    } else {
+        packet_queue[rear] = packet;
+        rear = (rear + 1) % QUEUE_SIZE;
+    }
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+int dequeue(Packet *packet) {
+    pthread_mutex_lock(&queue_mutex);
+    if (front == rear) {
+        pthread_mutex_unlock(&queue_mutex);
+        return 0;
+    }
+    *packet = packet_queue[front];
+    front = (front + 1) % QUEUE_SIZE;
+    pthread_mutex_unlock(&queue_mutex);
+    return 1;
+}

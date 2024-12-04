@@ -27,6 +27,8 @@ extern pthread_mutex_t queue_mutex;
 extern Packet packet_queue[QUEUE_SIZE];
 extern int front;
 extern int rear;
+void enqueue(Packet packet);
+int dequeue(Packet *packet);
 
 // 전역 변수 선언
 extern int keep_running;

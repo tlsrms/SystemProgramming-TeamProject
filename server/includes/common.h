@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <netinet/in.h> // sockaddr_in 사용을 위해 필요함
 
+#define FILE_NAME_SIZE 64
+#define FILE_PATH_SIZE 128
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 #define PORT 8080

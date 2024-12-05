@@ -9,7 +9,8 @@ void *receive_server_packet(void *arg)
 
 	while (1)
 	{
-		if (!keep_running) {
+		if (!keep_running)
+		{
 			return;
 		}
 
@@ -27,5 +28,3 @@ void *receive_server_packet(void *arg)
 
 	return NULL;
 }
-
-

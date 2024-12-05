@@ -6,4 +6,3 @@
 void broadcast_packet(Packet *packet, Client clients[], int client_count, int exclude_sock);
 
 #endif
-

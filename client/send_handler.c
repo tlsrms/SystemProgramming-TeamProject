@@ -16,21 +16,23 @@ void *send_terminal_packet(void *arg)
 		// 입력 내용에 따라 분기
 		if (strcmp(input, "/new") == 0)
 		{
-			command_new(); //shared_file.txt 초기화
+			command_new(); // shared_file.txt 초기화
 		}
 		else if (strstr(input, "/load") != NULL)
 		{
 			command_load(input); // 파일 내용 복사 및 shared_file.txt에 붙여넣기
-
-		} else if (strcmp(input, "/commit") == 0) {
+		}
+		else if (strcmp(input, "/commit") == 0)
+		{
 			command_commit(input);
-
-		} else if (strstr(input, "/rebase") != NULL) {
+		}
+		else if (strstr(input, "/rebase") != NULL)
+		{
 			command_rebase(input);
-
-		}else if (strcmp(input, "/log") == 0) {
+		}
+		else if (strcmp(input, "/log") == 0)
+		{
 			command_log(input);
-
 		}
 		else if (strcmp(input, "/quit") == 0)
 		{
@@ -41,7 +43,8 @@ void *send_terminal_packet(void *arg)
 			send_chat_message(input); // 채팅 메시지 전송
 		}
 
-		if (!keep_running) {
+		if (!keep_running)
+		{
 			return;
 		}
 	}
@@ -55,13 +58,14 @@ void *send_terminal_packet(void *arg)
 void command_new()
 {
 	// 파일을 쓰기 모드로 열기
-    FILE *file = fopen(SHARED_FILE, "w"); // 쓰기 모드는 자동으로 파일 내용을 삭제
-    if (file == NULL) {
-        perror("[Error] Failed to /new");
-        return;
-    }
+	FILE *file = fopen(SHARED_FILE, "w"); // 쓰기 모드는 자동으로 파일 내용을 삭제
+	if (file == NULL)
+	{
+		perror("[Error] Failed to /new");
+		return;
+	}
 
-    fclose(file);
+	fclose(file);
 	printf("[Client] File '%s' newly created successfully.\n", SHARED_FILE);
 }
 
@@ -69,52 +73,52 @@ void command_new()
 void command_load(const char *input)
 {
 	// 입력에서 파일 경로 추출
-    char filepath[BUFFER_SIZE];
-    sscanf(input + 6, "%s", filepath); // "/load " 이후 파일 이름 읽기
+	char filepath[BUFFER_SIZE];
+	sscanf(input + 6, "%s", filepath); // "/load " 이후 파일 이름 읽기
 
-    printf("[Client] Loading file from path: %s\n", filepath);
+	printf("[Client] Loading file from path: %s\n", filepath);
 
-    // loaded_file.txt 열기 (읽기 모드)
-    FILE *loaded_file = fopen(filepath, "r");
-    if (loaded_file == NULL)
-    {
-        perror("[Client] Failed to open file");
-        return;
-    }
+	// loaded_file.txt 열기 (읽기 모드)
+	FILE *loaded_file = fopen(filepath, "r");
+	if (loaded_file == NULL)
+	{
+		perror("[Client] Failed to open file");
+		return;
+	}
 
-    // shared_file.txt 열기 (쓰기 모드)
-    FILE *shared_file = fopen(SHARED_FILE, "w");
-    if (shared_file == NULL)
-    {
-        perror("[Client] Failed to open shared_file.txt");
-        fclose(loaded_file);
-        return;
-    }
+	// shared_file.txt 열기 (쓰기 모드)
+	FILE *shared_file = fopen(SHARED_FILE, "w");
+	if (shared_file == NULL)
+	{
+		perror("[Client] Failed to open shared_file.txt");
+		fclose(loaded_file);
+		return;
+	}
 
-    // 파일 내용 복사
-    char buffer[BUFFER_SIZE];
-    size_t bytes_read;
+	// 파일 내용 복사
+	char buffer[BUFFER_SIZE];
+	size_t bytes_read;
 	pthread_mutex_lock(&file_mutex); // file_mutex lock
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), loaded_file)) > 0)
-    {
-        fwrite(buffer, 1, bytes_read, shared_file);
-    }
+	while ((bytes_read = fread(buffer, 1, sizeof(buffer), loaded_file)) > 0)
+	{
+		fwrite(buffer, 1, bytes_read, shared_file);
+	}
 	pthread_mutex_unlock(&file_mutex); // file_mutex unlock
 
-    // 파일 스트림 닫기
-    fclose(loaded_file);
-    fclose(shared_file);
+	// 파일 스트림 닫기
+	fclose(loaded_file);
+	fclose(shared_file);
 
-    printf("[Client] File '%s' loaded to 'shared_file.txt' successfully.\n", filepath);
-
+	printf("[Client] File '%s' loaded to 'shared_file.txt' successfully.\n", filepath);
 }
 
 // commit
-void command_commit(const char *input) {
+void command_commit(const char *input)
+{
 	Packet packet;
 
-	memset(&packet, 0, sizeof(Packet)); // 패킷 메모리 초기화
-	packet.flag = 3;					// 패킷 플래그 설정 (명령어)
+	memset(&packet, 0, sizeof(Packet));						// 패킷 메모리 초기화
+	packet.flag = 3;										// 패킷 플래그 설정 (명령어)
 	strncpy(packet.message, input, sizeof(packet.message)); // "/commit"
 
 	pthread_mutex_lock(&send_mutex);
@@ -125,12 +129,13 @@ void command_commit(const char *input) {
 	pthread_mutex_unlock(&send_mutex); // unlock
 }
 
-// rebase 
-void command_rebase(const char *input) {
+// rebase
+void command_rebase(const char *input)
+{
 	Packet packet;
 
-	memset(&packet, 0, sizeof(Packet)); // 패킷 메모리 초기화
-	packet.flag = 3;					// 패킷 플래그 설정 (명령어)
+	memset(&packet, 0, sizeof(Packet));						// 패킷 메모리 초기화
+	packet.flag = 3;										// 패킷 플래그 설정 (명령어)
 	strncpy(packet.message, input, sizeof(packet.message)); // "/rebase (number)"
 
 	pthread_mutex_lock(&send_mutex);
@@ -142,11 +147,12 @@ void command_rebase(const char *input) {
 }
 
 // log
-void command_log(const char *input) {
+void command_log(const char *input)
+{
 	Packet packet;
 
-	memset(&packet, 0, sizeof(Packet)); // 패킷 메모리 초기화
-	packet.flag = 3;					// 패킷 플래그 설정 (명령어)
+	memset(&packet, 0, sizeof(Packet));						// 패킷 메모리 초기화
+	packet.flag = 3;										// 패킷 플래그 설정 (명령어)
 	strncpy(packet.message, input, sizeof(packet.message)); // "/log"
 
 	pthread_mutex_lock(&send_mutex);

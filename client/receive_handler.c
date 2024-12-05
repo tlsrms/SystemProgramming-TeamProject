@@ -9,6 +9,10 @@ void *receive_server_packet(void *arg)
 
 	while (1)
 	{
+		if (!keep_running) {
+			return;
+		}
+
 		int bytes_received = recv(client_socket, &packet, sizeof(Packet), 0);
 
 		if (bytes_received <= 0)

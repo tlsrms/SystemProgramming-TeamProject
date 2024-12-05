@@ -21,6 +21,16 @@ void *send_terminal_packet(void *arg)
 		else if (strstr(input, "/load") != NULL)
 		{
 			command_load(input); // 파일 내용 복사 및 shared_file.txt에 붙여넣기
+
+		} else if (strcmp(input, "/commit") == 0) {
+			command_commit(input);
+
+		} else if (strstr(input, "/rebase") != NULL) {
+			command_rebase(input);
+
+		}else if (strcmp(input, "/log") == 0) {
+			command_log(input);
+
 		}
 		else if (strcmp(input, "/quit") == 0)
 		{
@@ -47,7 +57,7 @@ void command_new()
 	// 파일을 쓰기 모드로 열기
     FILE *file = fopen(SHARED_FILE, "w"); // 쓰기 모드는 자동으로 파일 내용을 삭제
     if (file == NULL) {
-        perror("[Error] Failed to open file");
+        perror("[Error] Failed to /new");
         return;
     }
 
@@ -84,10 +94,12 @@ void command_load(const char *input)
     // 파일 내용 복사
     char buffer[BUFFER_SIZE];
     size_t bytes_read;
+	pthread_mutex_lock(&file_mutex); // file_mutex lock
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), loaded_file)) > 0)
     {
         fwrite(buffer, 1, bytes_read, shared_file);
     }
+	pthread_mutex_unlock(&file_mutex); // file_mutex unlock
 
     // 파일 스트림 닫기
     fclose(loaded_file);
@@ -95,6 +107,54 @@ void command_load(const char *input)
 
     printf("[Client] File '%s' loaded to 'shared_file.txt' successfully.\n", filepath);
 
+}
+
+// commit
+void command_commit(const char *input) {
+	Packet packet;
+
+	memset(&packet, 0, sizeof(Packet)); // 패킷 메모리 초기화
+	packet.flag = 3;					// 패킷 플래그 설정 (명령어)
+	strncpy(packet.message, input, sizeof(packet.message)); // "/commit"
+
+	pthread_mutex_lock(&send_mutex);
+	if (send(client_socket, &packet, sizeof(Packet), 0) < 0)
+	{ // 전송
+		perror("[Client] Failed to /commit");
+	}
+	pthread_mutex_unlock(&send_mutex); // unlock
+}
+
+// rebase 
+void command_rebase(const char *input) {
+	Packet packet;
+
+	memset(&packet, 0, sizeof(Packet)); // 패킷 메모리 초기화
+	packet.flag = 3;					// 패킷 플래그 설정 (명령어)
+	strncpy(packet.message, input, sizeof(packet.message)); // "/rebase (number)"
+
+	pthread_mutex_lock(&send_mutex);
+	if (send(client_socket, &packet, sizeof(Packet), 0) < 0)
+	{ // 전송
+		perror("[Client] Failed to /rebase");
+	}
+	pthread_mutex_unlock(&send_mutex); // unlock
+}
+
+// log
+void command_log(const char *input) {
+	Packet packet;
+
+	memset(&packet, 0, sizeof(Packet)); // 패킷 메모리 초기화
+	packet.flag = 3;					// 패킷 플래그 설정 (명령어)
+	strncpy(packet.message, input, sizeof(packet.message)); // "/log"
+
+	pthread_mutex_lock(&send_mutex);
+	if (send(client_socket, &packet, sizeof(Packet), 0) < 0)
+	{ // 전송
+		perror("[Client] Failed to /log");
+	}
+	pthread_mutex_unlock(&send_mutex); // unlock
 }
 
 // /quit

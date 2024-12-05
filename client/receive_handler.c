@@ -9,12 +9,16 @@ void *receive_server_packet(void *arg)
 
 	while (1)
 	{
+		if (!keep_running) {
+			return;
+		}
+
 		int bytes_received = recv(client_socket, &packet, sizeof(Packet), 0);
 
 		if (bytes_received <= 0)
 		{
 			printf("[Client] Disconnected from server.\n");
-			exit(EXIT_FAILURE);
+			return NULL;
 		}
 
 		// 패킷 정보를 메인스레드의 작업큐로 보내는 코드

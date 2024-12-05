@@ -1,11 +1,16 @@
-#include <pthread.h>
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <pthread.h>
+#include <netinet/in.h> // sockaddr_in 사용을 위해 필요함
+
+#define FILE_NAME_SIZE 64
+#define FILE_PATH_SIZE 128
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 #define PORT 8080
 #define CHAT_LOG "chat_log.txt"
+#define USER_FILE "user.txt"
 #define SHARED_FILE "shared_file.txt"
 #define VERSION_DIR "version_logs/"
 
@@ -24,10 +29,21 @@ typedef struct {
     pthread_t thread;
 } Client;
 
+// 작업 큐 정의
+#define QUEUE_SIZE 100
+extern pthread_mutex_t queue_mutex;
+extern Packet packet_queue[QUEUE_SIZE];
+extern int front;
+extern int rear;
+
 // 전역 변수 선언
-extern Client clients[MAX_CLIENTS];       // 클라이언트 정보 배열
-extern int client_count;                  // 연결된 클라이언트 수
-extern pthread_mutex_t clients_mutex;     // 클라이언트 배열 보호 뮤텍스
-extern pthread_mutex_t file_mutex;        // 파일 작업 보호 뮤텍스
+extern int keep_running;
+extern Client clients[MAX_CLIENTS];  // 클라이언트 정보 배열
+extern int client_count;             // 연결된 클라이언트 수
+extern pthread_mutex_t clients_mutex; // 클라이언트 배열 보호 뮤텍스
+extern pthread_mutex_t file_mutex;    // 파일 작업 보호 뮤텍스
+extern pthread_mutex_t send_mutex;    // send()시 소켓 보호 뮤텍스
+extern int server_fd;
+extern struct sockaddr_in server_addr;
 
 #endif

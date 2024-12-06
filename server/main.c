@@ -41,6 +41,7 @@ int main() {
             if (current_work.flag == 1) { // 채팅 메시지
                 // 
                 // 채팅 log 저장 + 채팅 broadcast <- 3번
+                handle_chat_message(&current_work, find_current_sockfd(&current_work));
                 //
             } else if (current_work.flag == 2) { // 파일 데이터
 				//
